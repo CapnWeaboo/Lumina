@@ -1,1 +1,1 @@
-Repository containing versioned uploads and release files for Lumina, leaked and distributed publicly until we have a full working AI.
+Repository containing versioned uploads and release files for Lumina, leaked and distributed publicly until we have a full working AI. We are actively attempting to create a full table of how the language Y9+ operates to successfully recreate and/or create a compiler for this language.
