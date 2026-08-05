@@ -1,0 +1,219 @@
+// THIS IS THE CURRENT VERSION. RIPPING OUT LOST SOME LINES HOWEVER //
+
+type Tensor {
+  data: Array<Decimal>;
+  shape: Array<Integer>;
+  strides: Array<Integer>;
+  offset: Integer;
+}
+type Model {
+  layers: Array<Layer>;
+  config: ModelConfig;
+}
+type Layer {
+  kind: String;
+  weights: Tensor;
+  bias: Tensor;
+  params: Map<String, Decimal>;
+}
+type ModelConfig {
+  vocabSize: Integer;
+  hiddenSize: Integer;
+  numLayers: Integer;
+  numHeads: Integer;
+  maxSeqLen: Integer;
+  dropout: Decimal;
+}
+func matMul(a: Tensor, b: Tensor) -> Tensor {
+  new rows = a.shape[0];
+  new cols = b.shape[1];
+  new inner = a.shape[1];
+  new outData: Array<Decimal> = [];
+  new i = 0;
+  while i < rows {
+    new j = 0;
+    while j < cols {
+      new sum = 0.0;
+      new k = 0;
+      while k < inner {
+        sum = sum + a.data[a.offset + i * a.strides[0] + k * a.strides[1]] * b.data[b.offset + k * b.strides[0] + j * b.strides[1]];
+        k = k + 1;
+      }
+      outData.push(sum);
+      j = j + 1;
+    }
+    i = i + 1;
+  }
+  return Tensor { data: outData, shape: [rows, cols], strides: [cols, 1], offset: 0 };
+}
+func add(a: Tensor, b: Tensor) -> Tensor {
+  new outData: Array<Decimal> = [];
+  new size = a.data.length;
+  new i = 0;
+  while i < size {
+    outData.push(a.data[i] + b.data[i]);
+    i = i + 1;
+  }
+  return Tensor { data: outData, shape: a.shape, strides: a.strides, offset: 0 };
+}
+func scale(t: Tensor, s: Decimal) -> Tensor {
+  new outData: Array<Decimal> = [];
+  new i = 0;
+  while i < t.data.length {
+    outData.push(t.data[i] * s);
+    i = i + 1;
+  }
+  return Tensor { data: outData, shape: t.shape, strides: t.strides, offset: 0 };
+}
+func relu(t: Tensor) -> Tensor {
+  new outData: Array<Decimal> = [];
+  new i = 0;
+  while i < t.data.length {
+    new v = t.data[i];
+    if v < 0.0 { v = 0.0; }
+    outData.push(v);
+    i = i + 1;
+  }
+  return Tensor { data: outData, shape: t.shape, strides: t.strides, offset: 0 };
+}
+func softmax(t: Tensor) -> Tensor {
+  new maxVal = t.data[0];
+  new i = 1;
+  while i < t.data.length {
+    if t.data[i] > maxVal { maxVal = t.data[i]; }
+    i = i + 1;
+  }
+  new expSum = 0.0;
+  new expVals: Array<Decimal> = [];
+  new j = 0;
+  while j < t.data.length {
+    new e = y9Stdlib.math.exp(t.data[j] - maxVal);
+    expVals.push(e);
+    expSum = expSum + e;
+    j = j + 1;
+  }
+  new outData: Array<Decimal> = [];
+  new k = 0;
+  while k < expVals.length {
+    outData.push(expVals[k] / expSum);
+    k = k + 1;
+  }
+  return Tensor { data: outData, shape: t.shape, strides: t.strides, offset: 0 };
+}
+func layerNorm(t: Tensor, eps: Decimal) -> Tensor {
+  new mean = 0.0;
+  new i = 0;
+  while i < t.data.length {
+    mean = mean + t.data[i];
+    i = i + 1;
+  }
+  mean = mean / Decimal(t.data.length);
+  new var = 0.0;
+  new j = 0;
+  while j < t.data.length {
+    new diff = t.data[j] - mean;
+    var = var + diff * diff;
+    j = j + 1;
+  }
+  var = var / Decimal(t.data.length);
+  new invStd = 1.0 / y9Stdlib.math.sqrt(var + eps);
+  new outData: Array<Decimal> = [];
+  new k = 0;
+  while k < t.data.length {
+    outData.push((t.data[k] - mean) * invStd);
+    k = k + 1;
+  }
+  return Tensor { data: outData, shape: t.shape, strides: t.strides, offset: 0 };
+}
+func attention(query: Tensor, key: Tensor, value: Tensor, mask: Tensor | null) -> Tensor {
+  new dk = Decimal(query.shape[1]);
+  new scores = matMul(query, key.transpose());
+  scores = scale(scores, 1.0 / y9Stdlib.math.sqrt(dk));
+  if mask != null {
+    new i = 0;
+    while i < scores.data.length {
+      if mask.data[i] == 0.0 { scores.data[i] = -1e9; }
+      i = i + 1;
+    }
+  }
+  new probs = softmax(scores);
+  return matMul(probs, value);
+}
+func transformerBlock(input: Tensor, layer: Layer, mask: Tensor | null) -> Tensor {
+  new hidden = layer.weights.shape[0];
+  new q = matMul(input, layer.weights);
+  q = add(q, layer.bias);
+  new k = matMul(input, layer.weights);
+  k = add(k, layer.bias);
+  new v = matMul(input, layer.weights);
+  v = add(v, layer.bias);
+  new attnOut = attention(q, k, v, mask);
+  new residual = add(input, attnOut);
+  new norm = layerNorm(residual, 1e-5);
+  new ff = matMul(norm, layer.weights);
+  ff = add(ff, layer.bias);
+  ff = relu(ff);
+  new out = add(norm, ff);
+  return layerNorm(out, 1e-5);
+}
+func forward(model: Model, inputIds: Array<Integer>) -> Tensor {
+  new embed = model.layers[0].weights;
+  new hidden = Tensor { data: [], shape: [inputIds.length, model.config.hiddenSize], strides: [model.config.hiddenSize, 1], offset: 0 };
+  new i = 0;
+  while i < inputIds.length {
+    new id = inputIds[i];
+    new rowStart = id * model.config.hiddenSize;
+    new rowData = embed.data.slice(rowStart, rowStart + model.config.hiddenSize);
+    hidden.data = hidden.data + rowData;
+    i = i + 1;
+  }
+  new mask = null;
+  new seqLen = inputIds.length;
+  if model.config.maxSeqLen > 0 {
+    new maskData: Array<Decimal> = [];
+    new i2 = 0;
+    while i2 < seqLen {
+      new j2 = 0;
+      while j2 < seqLen {
+        if j2 > i2 { maskData.push(0.0); } else { maskData.push(1.0); }
+        j2 = j2 + 1;
+      }
+      i2 = i2 + 1;
+    }
+    mask = Tensor { data: maskData, shape: [seqLen, seqLen], strides: [seqLen, 1], offset: 0 };
+  }
+  new layerIdx = 1;
+  while layerIdx < model.layers.length {
+    hidden = transformerBlock(hidden, model.layers[layerIdx], mask);
+    layerIdx = layerIdx + 1;
+  }
+  new finalLayer = model.layers[model.layers.length - 1];
+  new logits = matMul(hidden, finalLayer.weights);
+  logits = add(logits, finalLayer.bias);
+  return logits;
+}
+func loadModel(path: String) -> Result<Model, String> {
+  return Ok(Model {
+    layers: [],
+    config: ModelConfig {
+      vocabSize: 5000,
+      hiddenSize: 128,
+      numLayers: 6,
+      numHeads: 4,
+      maxSeqLen: 64,
+      dropout: 0.1
+    }
+  });
+}
+func main() -> Integer {
+  new modelResult = loadModel("lumina_model.bin");
+  match modelResult {
+    case Ok(model) -> {
+      new input = [1, 2, 3, 4, 5];
+      new logits = forward(model, input);
+      display.show("Logits: ", logits.data.slice(0, 10), "\n");
+    }
+    case Err(msg) -> display.show("Model load failed: ", msg, "\n");
+  }
+  return 0;
+}
