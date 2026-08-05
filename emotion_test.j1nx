@@ -1,0 +1,6 @@
+emotion_layer {
+    state: "SIMULATED",
+    response_weight: 0.73,
+    empathy_bias: 0.41,
+    humor_adaptation: ENABLED
+}
