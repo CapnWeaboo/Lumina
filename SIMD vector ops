@@ -1,0 +1,138 @@
+// THIS IS AN OLDER VERSION. THE NEWER VERSION IS PACKAGED AND MORE PROTECTED //
+
+new EPSILON = 0.000000001;
+type Vec3 {
+  x: Decimal = 0.0,
+  y: Decimal = 0.0,
+  z: Decimal = 0.0
+}
+impl Vec3 {
+  func add(other: Vec3) -> Vec3 {
+    return Vec3 { x: this.x + other.x, y: this.y + other.y, z: this.z + other.z };
+  }
+  func sub(other: Vec3) -> Vec3 {
+    return Vec3 { x: this.x - other.x, y: this.y - other.y, z: this.z - other.z };
+  }
+  func scale(s: Decimal) -> Vec3 {
+    return Vec3 { x: this.x * s, y: this.y * s, z: this.z * s };
+  }
+  func dot(other: Vec3) -> Decimal {
+    return this.x * other.x + this.y * other.y + this.z * other.z;
+  }
+  func lengthSquared() -> Decimal {
+    return this.dot(this);
+  }
+  func length() -> Decimal {
+    return y9Stdlib.math.sqrt(this.lengthSquared());
+  }
+  func normalize() -> Vec3 {
+    new lenSq = this.lengthSquared();
+    if lenSq < EPSILON {
+      return Vec3 { x: 0.0, y: 0.0, z: 0.0 };
+    }
+    new invLen = 1.0 / y9Stdlib.math.sqrt(lenSq);
+    return this.scale(invLen);
+  }
+}
+func vecArrayAdd(a: Array<Decimal>, b: Array<Decimal>) -> Result<Array<Decimal>, String> {
+  if a.length != b.length {
+    return Err("vecArrayAdd: dimension mismatch");
+  }
+  new out: Array<Decimal> = [];
+  new i = 0;
+  while i < a.length {
+    out.push(a[i] + b[i]);
+    i = i + 1;
+  }
+  return Ok(out);
+}
+func vecArrayScale(a: Array<Decimal>, s: Decimal) -> Array<Decimal> {
+  new out: Array<Decimal> = [];
+  new i = 0;
+  while i < a.length {
+    out.push(a[i] * s);
+    i = i + 1;
+  }
+  return out;
+}
+func vecArrayDot(a: Array<Decimal>, b: Array<Decimal>) -> Result<Decimal, String> {
+  if a.length != b.length {
+    return Err("vecArrayDot: dimension mismatch");
+  }
+  new sum = 0.0;
+  new i = 0;
+  while i < a.length {
+    sum = sum + a[i] * b[i];
+    i = i + 1;
+  }
+  return Ok(sum);
+}
+func vecArrayMagnitudeSquared(a: Array<Decimal>) -> Decimal {
+  new sum = 0.0;
+  new i = 0;
+  while i < a.length {
+    sum = sum + a[i] * a[i];
+    i = i + 1;
+  }
+  return sum;
+}
+func vecArrayMagnitude(a: Array<Decimal>) -> Decimal {
+  return y9Stdlib.math.sqrt(vecArrayMagnitudeSquared(a));
+}
+func vecArrayNormalize(a: Array<Decimal>) -> Array<Decimal> {
+  new lenSq = vecArrayMagnitudeSquared(a);
+  if lenSq < EPSILON {
+    return vecArrayScale(a, 0.0);
+  }
+  new invLen = 1.0 / y9Stdlib.math.sqrt(lenSq);
+  return vecArrayScale(a, invLen);
+}
+func vecArrayDistanceSquared(a: Array<Decimal>, b: Array<Decimal>) -> Result<Decimal, String> {
+  if a.length != b.length {
+    return Err("vecArrayDistanceSquared: dimension mismatch");
+  }
+  new sum = 0.0;
+  new i = 0;
+  while i < a.length {
+    new diff = a[i] - b[i];
+    sum = sum + diff * diff;
+    i = i + 1;
+  }
+  return Ok(sum);
+}
+func cosineSimilarity(a: Array<Decimal>, b: Array<Decimal>) -> Result<Decimal, String> {
+  if a.length != b.length {
+    return Err("cosineSimilarity: dimension mismatch");
+  }
+  new denom = vecArrayMagnitude(a) * vecArrayMagnitude(b);
+  if denom < EPSILON {
+    return Ok(0.0);
+  }
+  new d = try vecArrayDot(a, b);
+  return Ok(d / denom);
+}
+func cosineSimilarityPreNormalized(normA: Array<Decimal>, normB: Array<Decimal>) -> Result<Decimal, String> {
+  return vecArrayDot(normA, normB);
+}
+func main() -> Integer {
+  new a = Vec3 { x: 1.0, y: 2.0, z: 3.0 };
+  new b = Vec3 { x: 4.0, y: 5.0, z: 6.0 };
+  display.show("dot(a,b) = ", a.dot(b), "\n");
+  display.show("|a| = ", a.length(), "\n");
+  new embeddingA = [0.12, 0.98, 0.33, 0.71, 0.05];
+  new embeddingB = [0.15, 0.90, 0.40, 0.65, 0.10];
+  match (cosineSimilarity(embeddingA, embeddingB)) {
+    case Ok(sim) -> display.show("cosine similarity = ", sim, "\n");
+    case Err(msg) -> display.show("error: ", msg, "\n");
+  }
+  new mismatchedA = [1.0, 2.0, 3.0];
+  new mismatchedB = [1.0, 2.0];
+  match (vecArrayAdd(mismatchedA, mismatchedB)) {
+    case Ok(sum) -> display.show("sum = ", sum, "\n");
+    case Err(msg) -> display.show("error: ", msg, "\n");
+  }
+  new nearZero = [0.0000000001, 0.0, 0.0];
+  new nearZeroMag = vecArrayMagnitude(nearZero);
+  display.show("near-zero magnitude = ", nearZeroMag, ", treated as zero = ", nearZeroMag < EPSILON, "\n");
+  return 0;
+}
