@@ -1,3 +1,5 @@
+// THIS IS AN OLDER VERSION. THE NEWER VERSION IS PACKAGED AND MORE PROTECTED //
+
 type QuantizationPrecision { kind: "fp32" } | { kind: "fp16" } | { kind: "bf16" } | { kind: "int16" } | { kind: "int8" } | { kind: "int4" }
 type QuantBlock {
   offset: Integer,
